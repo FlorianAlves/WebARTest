@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="power-preference" content="high-performance">
-  <title>WebAR - Portail Magique Invisible</title>
+  <title>WebAR - Portail Magique 100% Invisible</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-aframe.prod.js"></script>
@@ -73,7 +73,35 @@
     });
 
     // =================================================================
-    // 2. MASQUE D'OCCLUSION (BLINDÉ CONTRE L'INVISIBILITÉ VISIBLE)
+    // 2. LE CORRECTIF : COMPOSANT D'INVISIBILITÉ PURE (THREE.JS)
+    // =================================================================
+    AFRAME.registerComponent('portal-occluder', {
+      init: function () {
+        const applyOcclusion = () => {
+          const mesh = this.el.getObject3D('mesh');
+          if (mesh) {
+            mesh.traverse(function (node) {
+              if (node.isMesh) {
+                // On force Three.js à ne dessiner aucune couleur, juste la profondeur
+                node.material.colorWrite = false;
+                node.material.needsUpdate = true;
+              }
+            });
+          }
+        };
+
+        // On écoute le moment où la géométrie est prête
+        this.el.addEventListener('object3dset', applyOcclusion);
+        
+        // Au cas où elle est déjà prête au moment de l'initialisation
+        if (this.el.getObject3D('mesh')) {
+          applyOcclusion();
+        }
+      }
+    });
+
+    // =================================================================
+    // 3. MASQUE D'OCCLUSION (Création des murs)
     // =================================================================
     AFRAME.registerComponent('auto-portal-mask', {
       schema: {
@@ -81,37 +109,23 @@
         height: {type: 'number', default: 1} 
       },
       update: function () {
-        // Nettoyage si on met à jour
         while (this.el.firstChild) { this.el.removeChild(this.el.firstChild); }
 
         const w = this.data.width;
         const h = this.data.height;
-        const b = 10; // Épaisseur des murs invisibles
+        const b = 10; // Épaisseur des murs
 
-        // Fonction interne pour générer un mur d'occlusion TOTALEMENT invisible
         const createWall = (x, y, ww, wh) => {
-          // Utilisation de la primitive a-plane pour une meilleure gestion du matériel par défaut
-          const wall = document.createElement('a-plane');
-          wall.setAttribute('width', ww);
-          wall.setAttribute('height', wh);
+          const wall = document.createElement('a-entity');
+          wall.setAttribute('geometry', `primitive: plane; width: ${ww}; height: ${wh}`);
           
-          // === LE FIX ===
-          // On définit un matériel complet qui n'accepte pas la lumière et ne dessine aucune couleur
-          wall.setAttribute('material', {
-            shader: 'flat', // Inutile de calculer des lumières sur un occluder
-            colorWrite: false, // Technique standard pour un occluder invisible mais efficace
-            depthTest: true,
-            visible: true, // L'entité doit être visible pour appliquer le matériel, colorWrite s'occupe de l'invisibilité
-            side: 'double'
-          });
-
-          // Position Z très légère pour occlure juste devant l'affiche
+          // ON APPLIQUE NOTRE NOUVEAU COMPOSANT INFAILLIBLE ICI
+          wall.setAttribute('portal-occluder', ''); 
+          
           wall.setAttribute('position', `${x} ${y} 0.01`); 
-          
           this.el.appendChild(wall);
         };
 
-        // Création des 4 murs autour de l'affiche
         createWall(0, (h / 2) + (b / 2), w + (b * 2), b); // Haut
         createWall(0, -(h / 2) - (b / 2), w + (b * 2), b); // Bas
         createWall(-(w / 2) - (b / 2), 0, b, h); // Gauche
@@ -120,7 +134,7 @@
     });
 
     // =================================================================
-    // 3. CONTROLEUR DE LECTURE (Performance)
+    // 4. CONTROLEUR DE LECTURE
     // =================================================================
     AFRAME.registerComponent('smart-target', {
       init: function() {
@@ -164,7 +178,7 @@
 
   <script>
     // =================================================================
-    // 4. SCANNER ET GÉNÉRATEUR D'ASSETS
+    // 5. SCANNER ET GÉNÉRATEUR D'ASSETS
     // =================================================================
     const MAX_TARGETS = 10; 
     const ASSETS_PATH = './assets/';
@@ -173,7 +187,6 @@
     const startBtn = document.getElementById('start-btn');
     const statusText = document.getElementById('status');
 
-    // Système de cache pour alléger le réseau
     const cache = {};
     async function checkFileExists(url) {
       if (cache[url] !== undefined) return cache[url];
@@ -205,7 +218,7 @@
         const targetEl = document.createElement('a-entity');
         targetEl.setAttribute('mindar-image-target', `targetIndex: ${i}`);
         
-        let currentRatio = 1; // Ratio par défaut
+        let currentRatio = 1; 
 
         // --- A. VIDÉO (.mp4) ---
         if (hasMp4) {
@@ -231,18 +244,15 @@
           
           targetEl.appendChild(videoPlane);
 
-          // Redimensionnement + Création du portail dynamique
           video.addEventListener('loadedmetadata', () => {
              currentRatio = video.videoHeight / video.videoWidth;
              videoPlane.setAttribute('geometry', {primitive: 'plane', width: 1, height: currentRatio});
              
-             // Ajoute le masque d'occlusion autour de la vidéo
              const portalMask = document.createElement('a-entity');
              portalMask.setAttribute('auto-portal-mask', `width: 1; height: ${currentRatio}`);
              targetEl.appendChild(portalMask);
           }, { once: true });
         } else {
-          // S'il n'y a pas de vidéo, on crée quand même un masque 1x1 standard pour le modèle 3D
           const portalMask = document.createElement('a-entity');
           portalMask.setAttribute('auto-portal-mask', `width: 1; height: 1`);
           targetEl.appendChild(portalMask);
@@ -258,13 +268,12 @@
           targetEl.dataset.audioId = audio.id;
         }
 
-        // --- C. MODÈLE 3D (.glb) : EFFET PARALLAXE ---
+        // --- C. MODÈLE 3D (.glb) ---
         if (hasGlb) {
           const model = document.createElement('a-entity');
           model.setAttribute('gltf-model', `${ASSETS_PATH}${i}.glb`);
           model.setAttribute('scale', '0.5 0.5 0.5');
-          // IMPORTANT: Z à -1 pour enfoncer le modèle derrière l'affiche physique
-          model.setAttribute('position', '0 0 -1'); 
+          model.setAttribute('position', '0 0 -1'); // Z à -1 = derrière l'affiche
           model.setAttribute('animation-mixer', '');
           targetEl.appendChild(model);
         }
@@ -273,7 +282,6 @@
         docFragTargets.appendChild(targetEl);
       }
 
-      // Injection globale dans le DOM
       assetsContainer.appendChild(docFragAssets);
       targetsContainer.appendChild(docFragTargets);
 
@@ -284,7 +292,7 @@
     initExperience();
 
     // =================================================================
-    // 5. BOUTON DÉMARRER (Déblocage des médias iOS/Android)
+    // 6. BOUTON DÉMARRER
     // =================================================================
     startBtn.addEventListener('click', () => {
       document.getElementById('overlay').classList.add('hidden');
