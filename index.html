@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="power-preference" content="high-performance">
-  <title>WebAR - Portail & Optimisation</title>
+  <title>WebAR - Portail Magique Invisible</title>
 
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-aframe.prod.js"></script>
@@ -73,7 +73,7 @@
     });
 
     // =================================================================
-    // 2. MASQUE D'OCCLUSION (Effet Portail Magique)
+    // 2. MASQUE D'OCCLUSION (BLINDÉ CONTRE L'INVISIBILITÉ VISIBLE)
     // =================================================================
     AFRAME.registerComponent('auto-portal-mask', {
       schema: {
@@ -86,13 +86,28 @@
 
         const w = this.data.width;
         const h = this.data.height;
-        const b = 10; // Epaisseur des murs invisibles
+        const b = 10; // Épaisseur des murs invisibles
 
+        // Fonction interne pour générer un mur d'occlusion TOTALEMENT invisible
         const createWall = (x, y, ww, wh) => {
-          const wall = document.createElement('a-entity');
-          wall.setAttribute('geometry', `primitive: plane; width: ${ww}; height: ${wh}`);
-          wall.setAttribute('material', 'colorWrite: false'); // Rend le mur invisible mais bloque la 3D derrière
+          // Utilisation de la primitive a-plane pour une meilleure gestion du matériel par défaut
+          const wall = document.createElement('a-plane');
+          wall.setAttribute('width', ww);
+          wall.setAttribute('height', wh);
+          
+          // === LE FIX ===
+          // On définit un matériel complet qui n'accepte pas la lumière et ne dessine aucune couleur
+          wall.setAttribute('material', {
+            shader: 'flat', // Inutile de calculer des lumières sur un occluder
+            colorWrite: false, // Technique standard pour un occluder invisible mais efficace
+            depthTest: true,
+            visible: true, // L'entité doit être visible pour appliquer le matériel, colorWrite s'occupe de l'invisibilité
+            side: 'double'
+          });
+
+          // Position Z très légère pour occlure juste devant l'affiche
           wall.setAttribute('position', `${x} ${y} 0.01`); 
+          
           this.el.appendChild(wall);
         };
 
@@ -128,13 +143,11 @@
 </head>
 
 <body>
-  <!-- INTERFACE DE DÉMARRAGE -->
   <div id="overlay">
     <div id="status">Recherche des assets en cours...</div>
     <button id="start-btn">DÉMARRER</button>
   </div>
 
-  <!-- SCÈNE AR OPTIMISÉE -->
   <a-scene 
     mindar-image="imageTargetSrc: ./assets/targets.mind; uiScanning: yes; maxTrack: 1; filterMinCF:0.0001; filterBeta: 0.001;" 
     color-space="sRGB" 
@@ -192,7 +205,7 @@
         const targetEl = document.createElement('a-entity');
         targetEl.setAttribute('mindar-image-target', `targetIndex: ${i}`);
         
-        let currentRatio = 1; // Ratio par défaut (Carré)
+        let currentRatio = 1; // Ratio par défaut
 
         // --- A. VIDÉO (.mp4) ---
         if (hasMp4) {
@@ -288,7 +301,7 @@
       audios.forEach(a => {
         const p = a.play();
         if(p !== undefined) {
-            p.then(() => v.pause()).catch(e => console.error(e));
+            p.then(() => a.pause()).catch(e => console.error(e));
         }
       });
 
